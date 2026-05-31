@@ -26,10 +26,10 @@ When AI agents need to run commands that require root privileges (like `apt-get 
 If you want your AI agent to set this up automatically, just copy and paste this one-liner to your agent:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AE-0/sudo-me/refs/heads/main/docs/guide/installation.md
+curl -fsSL https://raw.githubusercontent.com/AE-0/sudo-me/refs/heads/master/docs/guide/installation.md
 ```
 
-## Installation
+## Installation For Humans
 
 ### Pre-compiled Binaries
 
