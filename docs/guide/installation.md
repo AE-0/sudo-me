@@ -191,6 +191,21 @@ npx skills add AE-0/sudo-me
 
 ---
 
+## Step 9: Restart Your Coding Tool
+
+**This step is critical.** After installing the skill, you MUST restart the coding tool you are currently using (OpenCode, Claude Code, Cursor, etc.) so that it reloads its skill catalog and discovers the newly installed `sudo-me` skill.
+
+Without restarting, the tool will not know the skill exists and will not be able to use `sudo-me run` to execute root commands.
+
+- **OpenCode:** Close and reopen the terminal session.
+- **Claude Code:** Close and reopen the Claude Code session.
+- **Cursor:** Reload the window (Ctrl+Shift+P → "Reload Window") or restart the application.
+- **Codex:** Close and reopen the session.
+
+After restarting, verify the skill is loaded by checking that the agent can now use `sudo-me run` without errors.
+
+---
+
 ## Troubleshooting
 
 - **"Error: Session not found"** — The daemon was not initialized. Run `sudo-me init`.
