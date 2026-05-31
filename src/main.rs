@@ -7,7 +7,6 @@ mod token;
 
 use std::env;
 use std::process::Command;
-use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -82,7 +81,7 @@ fn main() {
             #[cfg(windows)]
             {
                 let pipe_name = format!(r"\\.\pipe\sudo-me-{}", token);
-                let uid = env::var("USERNAME").unwrap_or_else(|_| "user".to_string());
+                let _uid = env::var("USERNAME").unwrap_or_else(|_| "user".to_string());
                 
                 // Elevate self to run daemon
                 askpass::elevate_self().expect("Failed to elevate");
@@ -91,7 +90,7 @@ fn main() {
                 // so we'll just sleep a bit or assume it works.
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 
-                save_session(&PathBuf::from(&pipe_name), &token, &home);
+                save_session(&std::path::PathBuf::from(&pipe_name), &token, &home);
                 println!("set SUDO_ME_SOCK={}", pipe_name);
                 println!("set SUDO_ME_TOKEN={}", token);
             }
@@ -156,6 +155,7 @@ fn main() {
             }
             #[cfg(windows)]
             {
+                let _home = home;
                 // Similar to init, elevate to run approve-config-daemon
             }
         }

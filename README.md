@@ -16,7 +16,9 @@ When AI agents need to run commands that require root privileges (like `apt-get 
 - **Root-Pinned TOFU (Trust On First Use):** Configuration is securely hashed and pinned by the root daemon to prevent user-space malware from silently downgrading security.
 - **JIT Confirmation (Secure Mode):** Optional GUI/TTY prompts to confirm commands before execution, mitigating prompt injection attacks on AI agents.
 - **Time-To-Live (TTL):** The background daemon automatically shuts down after a configurable period of inactivity.
-- **Cross-Platform:** Works across Linux, macOS, and BSD using standard Unix sockets.
+- **Cross-Platform:** Works across Linux, macOS, BSD, and Windows.
+  - **Linux/macOS/BSD:** Uses Unix Sockets and native elevation (`sudo`/`doas`/`osascript`).
+  - **Windows:** Uses Named Pipes with secure ACLs and UAC elevation (`runas`).
 - **Agent Ready:** Includes a standard `SKILL.md` for seamless integration with AI coding agents.
 
 ## 🤖 For LLM Agents
@@ -31,7 +33,11 @@ curl -fsSL https://raw.githubusercontent.com/AE-0/sudo-me/refs/heads/main/docs/g
 
 ### Pre-compiled Binaries
 
-You can download pre-compiled binaries for your platform from the [Releases page](https://github.com/AE-0/sudo-me/releases). Extract the archive and move the `sudo-me` binary to a directory in your `PATH` (e.g., `~/.local/bin`).
+You can download pre-compiled binaries for Linux and Windows from the [Releases page](https://github.com/AE-0/sudo-me/releases). 
+
+- **Linux:** Available in both GNU and Musl (static) versions.
+- **Windows:** Available as a ZIP archive containing the `.exe`.
+- **macOS/BSD:** Please build from source (see below) as cross-compilation for these platforms is currently limited.
 
 ### Prerequisites (for building from source)
 - Rust toolchain (or Podman/Docker for containerized building)
