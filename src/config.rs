@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub jit_confirm: bool,
     pub ttl_seconds: u64,
@@ -18,9 +18,10 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load_or_create(path: &Path) -> Self {
+    pub fn load_or_create(home_dir: &str) -> Self {
+        let path = PathBuf::from(home_dir).join(".config").join("sudo-me").join("config.toml");
         if path.exists() {
-            if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(config) = toml::from_str(&content) {
                     return config;
                 }
@@ -30,7 +31,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let _ = fs::write(path, toml::to_string(&config).unwrap());
+        let _ = fs::write(&path, toml::to_string(&config).unwrap());
         config
     }
 }
