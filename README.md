@@ -15,6 +15,7 @@ When AI agents need to run commands that require root privileges (like `apt-get 
 - **Passwordless Execution:** Run root commands without interactive prompts after a single initialization.
 - **Root-Pinned TOFU (Trust On First Use):** Configuration is securely hashed and pinned by the root daemon to prevent user-space malware from silently downgrading security.
 - **JIT Confirmation (Secure Mode):** Optional GUI/TTY prompts to confirm commands before execution, mitigating prompt injection attacks on AI agents.
+- **Configurable Confirm Dialog:** The confirmation dialog size and font are configurable via `config.toml` (`confirm_width`, `confirm_height`, `confirm_font`).
 - **Time-To-Live (TTL):** The background daemon automatically shuts down after a configurable period of inactivity.
 - **Cross-Platform:** Works across Linux, macOS, BSD, and Windows.
   - **Linux/macOS/BSD:** Uses Unix Sockets and native elevation (`sudo`/`doas`/`osascript`).
@@ -84,6 +85,20 @@ sudo-me run apt-get update
 sudo-me run systemctl restart nginx
 sudo-me run whoami
 ```
+
+## Configuration
+
+`sudo-me` reads its configuration from `~/.config/sudo-me/config.toml` (created with defaults on first run). The file is TOFU-pinned by the root daemon — after changing it, re-approve with `sudo-me approve-config`.
+
+```toml
+jit_confirm = true      # require a GUI/TTY confirmation before each command
+ttl_seconds = 900       # daemon auto-exits after this many seconds of inactivity
+confirm_width = 460     # optional: confirmation dialog width (zenity)
+confirm_height = 260    # optional: confirmation dialog height (zenity)
+confirm_font = "Sans 16" # optional: Pango font description for the dialog text
+```
+
+The dialog fields only affect the zenity (Linux GUI) path; kdialog, macOS and TTY fallbacks use their native sizing.
 
 ## Installing the Agent Skill
 
