@@ -5,14 +5,17 @@ use std::time::Duration;
 use std::env;
 use std::sync::Mutex;
 
-// The daemon reads SUDO_ME_AUDIT_LOG at audit-write time, so tests that point
-// it at distinct temp files must not run concurrently or they'd race the
-// process-global env var. Poisoning is tolerated: the audit log path is
-// replaced every test, so a poisoned guard is harmless.
-static AUDIT_LOCK: Mutex<()> = Mutex::new(());
+// Tests in this binary share process-global env vars (SUDO_ME_HASH_DIR,
+// SUDO_ME_AUDIT_LOG, SUDO_ME_TEST_MODE, SUDO_ME_CONFIRM) and spawn
+// long-running daemon threads whose cleanup removes files other tests rely
+// on. Running them concurrently races the env vars and hash files, which can
+// make verify_config_hash take the first-run branch and hang run_daemon in
+// the listener loop. Serialize the whole binary with one lock.
+static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn test_tofu_hash_mismatch() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let socket_dir = ipc::unix::create_secure_socket_dir().unwrap();
     let socket_path = socket_dir.join("tofu.sock");
     let home_dir = socket_dir.to_str().unwrap();
@@ -46,6 +49,7 @@ fn test_tofu_hash_mismatch() {
 
 #[test]
 fn test_ttl_expiration() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let socket_dir = ipc::unix::create_secure_socket_dir().unwrap();
     let socket_path = socket_dir.join("ttl.sock");
     let home_dir = socket_dir.to_str().unwrap();
@@ -90,7 +94,7 @@ fn test_ttl_expiration() {
 
 #[test]
 fn test_jit_confirmation_denial() {
-    let _guard = AUDIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let socket_dir = ipc::unix::create_secure_socket_dir().unwrap();
     let socket_path = socket_dir.join("jit.sock");
     let home_dir = socket_dir.to_str().unwrap();
@@ -143,7 +147,7 @@ fn test_jit_confirmation_denial() {
 
 #[test]
 fn test_audit_log_allow() {
-    let _guard = AUDIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let socket_dir = ipc::unix::create_secure_socket_dir().unwrap();
     let socket_path = socket_dir.join("audit-allow.sock");
     let home_dir = socket_dir.to_str().unwrap();
