@@ -1,6 +1,12 @@
 use std::process::Command;
 use std::io::{self, Write};
 
+/// Escape Pango markup special characters so dynamic text cannot break or
+/// misformat the zenity dialog markup.
+fn escape_pango(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
 pub fn prompt_password() -> io::Result<String> {
     #[cfg(target_os = "macos")]
     {
@@ -48,16 +54,33 @@ pub fn prompt_password() -> io::Result<String> {
         // Fallback to TTY
         use std::fs::OpenOptions;
         use std::io::Read;
+        use std::os::unix::io::AsRawFd;
+        use libc::{tcgetattr, tcsetattr, termios, ECHO, ECHONL, TCSANOW};
         
         if let Ok(mut tty) = OpenOptions::new().read(true).write(true).open("/dev/tty") {
-            write!(tty, "Password: ")?;
-            let mut password = String::new();
-            // Note: This doesn't hide characters, but it's a fallback
-            let mut buf = [0; 1024];
-            if let Ok(n) = tty.read(&mut buf) {
-                password = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+            let fd = tty.as_raw_fd();
+            let mut termios_old: termios = unsafe { std::mem::zeroed() };
+            let got_termios = unsafe { tcgetattr(fd, &mut termios_old) } == 0;
+            if got_termios {
+                let mut termios_new = termios_old;
+                termios_new.c_lflag &= !(ECHO);
+                termios_new.c_lflag |= ECHONL;
+                unsafe { tcsetattr(fd, TCSANOW, &termios_new); }
             }
-            return Ok(password);
+            let result = (|| -> io::Result<String> {
+                write!(tty, "Password: ")?;
+                let mut buf = [0; 1024];
+                let mut password = String::new();
+                if let Ok(n) = tty.read(&mut buf) {
+                    password = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+                }
+                Ok(password)
+            })();
+            // Restore echo even if the read/write above errored.
+            if got_termios {
+                unsafe { tcsetattr(fd, TCSANOW, &termios_old); }
+            }
+            return result;
         }
         Ok(String::new())
     }
@@ -75,7 +98,16 @@ pub fn prompt_password() -> io::Result<String> {
 }
 
 pub fn prompt_confirm(command: &str, args: &[String]) -> io::Result<bool> {
-    let message = format!("AI Agent wants to run as root: {} {}. Allow?", command, args.join(" "));
+    // Force-deny hook (testability, safe direction only): only `=0` (deny) is
+    // honored. There is deliberately no force-allow path — confirmation can
+    // never be bypassed via the environment.
+    if std::env::var("SUDO_ME_CONFIRM").as_deref() == Ok("0") {
+        return Ok(false);
+    }
+
+    let esc_cmd = escape_pango(command);
+    let esc_args = escape_pango(&args.join(" "));
+    let message = format!("AI Agent wants to run as root: {} {}. Allow?", esc_cmd, esc_args);
 
     #[cfg(target_os = "macos")]
     {
