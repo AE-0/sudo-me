@@ -112,7 +112,7 @@ fn handle_client(mut stream: Box<dyn ReadWrite>, expected_token: &str, config: &
             
             // JIT Confirmation
             if config.jit_confirm {
-                match askpass::prompt_confirm(&req.command, &req.args) {
+                match askpass::prompt_confirm(&req.command, &req.args, config) {
                     Ok(true) => (),
                     _ => {
                         let resp = IpcResponse::Error("User denied command execution".to_string());

@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::io::{self, Write};
+use crate::config::Config;
 
 pub fn prompt_password() -> io::Result<String> {
     #[cfg(target_os = "macos")]
@@ -74,8 +75,17 @@ pub fn prompt_password() -> io::Result<String> {
     Err(io::Error::new(io::ErrorKind::Other, "Unsupported platform"))
 }
 
-pub fn prompt_confirm(command: &str, args: &[String]) -> io::Result<bool> {
-    let message = format!("AI Agent wants to run as root: {} {}. Allow?", command, args.join(" "));
+pub fn prompt_confirm(command: &str, args: &[String], config: &Config) -> io::Result<bool> {
+    let inner = format!("AI Agent wants to run as root: {} {}. Allow?", command, args.join(" "));
+    // The font is a trusted config value; escape defensively anyway.
+    let message = match &config.confirm_font {
+        Some(f) => format!(
+            "<span font_desc=\"{}\">{}</span>",
+            f.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"),
+            inner
+        ),
+        None => inner,
+    };
 
     #[cfg(target_os = "macos")]
     {
@@ -100,10 +110,19 @@ pub fn prompt_confirm(command: &str, args: &[String]) -> io::Result<bool> {
     #[cfg(unix)]
     {
         if std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok() {
-            if let Ok(status) = Command::new("zenity")
-                .args(&["--question", "--text", &message, "--title=sudo-me Confirmation"])
-                .status()
-            {
+            let mut zenity_args = vec![
+                "--question".to_string(),
+                "--text".to_string(),
+                message.clone(),
+                "--title=sudo-me Confirmation".to_string(),
+            ];
+            if let Some(w) = config.confirm_width {
+                zenity_args.push(format!("--width={}", w));
+            }
+            if let Some(h) = config.confirm_height {
+                zenity_args.push(format!("--height={}", h));
+            }
+            if let Ok(status) = Command::new("zenity").args(&zenity_args).status() {
                 return Ok(status.success());
             }
             

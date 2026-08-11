@@ -6,6 +6,9 @@ use std::fs;
 pub struct Config {
     pub jit_confirm: bool,
     pub ttl_seconds: u64,
+    pub confirm_width: Option<u32>,
+    pub confirm_height: Option<u32>,
+    pub confirm_font: Option<String>, // Pango font description, e.g. "Sans 16"
 }
 
 impl Default for Config {
@@ -13,6 +16,9 @@ impl Default for Config {
         Self {
             jit_confirm: true,
             ttl_seconds: 900,
+            confirm_width: None,
+            confirm_height: None,
+            confirm_font: None,
         }
     }
 }
@@ -45,6 +51,9 @@ mod tests {
         let config = Config::default();
         assert!(config.jit_confirm);
         assert_eq!(config.ttl_seconds, 900);
+        assert!(config.confirm_width.is_none());
+        assert!(config.confirm_height.is_none());
+        assert!(config.confirm_font.is_none());
     }
 
     #[test]
@@ -56,5 +65,20 @@ mod tests {
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!(!config.jit_confirm);
         assert_eq!(config.ttl_seconds, 300);
+    }
+
+    #[test]
+    fn test_config_dialog_options_parsing() {
+        let toml_str = r#"
+            jit_confirm = true
+            ttl_seconds = 900
+            confirm_width = 460
+            confirm_height = 260
+            confirm_font = "Sans 16"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.confirm_width, Some(460));
+        assert_eq!(config.confirm_height, Some(260));
+        assert_eq!(config.confirm_font.as_deref(), Some("Sans 16"));
     }
 }
