@@ -15,6 +15,7 @@ When AI agents need to run commands that require root privileges (like `apt-get 
 - **Passwordless Execution:** Run root commands without interactive prompts after a single initialization.
 - **Root-Pinned TOFU (Trust On First Use):** Configuration is securely hashed and pinned by the root daemon to prevent user-space malware from silently downgrading security.
 - **JIT Confirmation (Secure Mode):** Optional GUI/TTY prompts to confirm commands before execution, mitigating prompt injection attacks on AI agents.
+- **Execution Audit Log:** Every privileged command is recorded by the root daemon to an append-only log after the JIT decision, with the decision (`ALLOW`/`DENY`) and exit code.
 - **Time-To-Live (TTL):** The background daemon automatically shuts down after a configurable period of inactivity.
 - **Cross-Platform:** Works across Linux, macOS, BSD, and Windows.
   - **Linux/macOS/BSD:** Uses Unix Sockets and native elevation (`sudo`/`doas`/`osascript`).
@@ -85,6 +86,33 @@ sudo-me run systemctl restart nginx
 sudo-me run whoami
 ```
 
+## Configuration
+
+`sudo-me` reads its configuration from `~/.config/sudo-me/config.toml` (created with defaults on first run). The file is TOFU-pinned by the root daemon — after changing it, re-approve with `sudo-me approve-config`.
+
+```toml
+jit_confirm = true      # require a GUI/TTY confirmation before each command
+ttl_seconds = 900       # daemon auto-exits after this many seconds of inactivity
+```
+
+- `jit_confirm` is **on by default** and cannot be disabled from the environment — the dialog is the gate for every privileged command.
+
+## Audit Log
+
+Every privileged command that reaches the JIT gate is recorded by the root daemon to an append-only log at `/var/log/sudo-me-audit.log` (overridable via the `SUDO_ME_AUDIT_LOG` env var, e.g. for tests):
+
+```
+2026-08-11T18:43:45+08:00 | sh | -c id; whoami | ALLOW | 0
+2026-08-11T18:44:49+08:00 | echo | deny-test-2 | DENY | -
+```
+
+Format: `ISO8601 timestamp | command | args | ALLOW|DENY | exit code` (exit code is `-` for denials, `ERR` if the command failed to spawn).
+
+- The record is written **after** the JIT decision: a denial is still audited.
+- Writing is best-effort — an unwritable audit log never blocks the privileged path.
+- Requests that fail token authentication are **not** audited (they never reach the JIT gate).
+- Recommended hardening on Linux (ext4): `touch /var/log/sudo-me-audit.log && chmod 600 /var/log/sudo-me-audit.log && chattr +a /var/log/sudo-me-audit.log` so the log is append-only even for root-owned processes.
+
 ## Installing the Agent Skill
 
 `sudo-me` includes a standard Agent Skill (`SKILL.md`) compatible with the [Agent Skills ecosystem](https://skills.sh). This teaches your AI agent how to use `sudo-me` automatically.
@@ -101,9 +129,11 @@ npx skills add ./sudo-me
 
 ## Security
 
-- **Socket Permissions:** The Unix socket is created in a secure temporary directory (`/tmp/sudo-me-XXXXXX`) with `0700` permissions, owned by the user.
-- **Token Authentication:** Connecting to the socket is not enough. Every IPC request must include a 32-character cryptographically secure random token generated during initialization.
+- **Socket Permissions:** The Unix socket is created in a secure temporary directory (`/tmp/sudo-me-XXXXXX`) with `0700` permissions, owned by the user. The socket itself is `0600` and is chowned to the calling user by the root daemon, so only that user (and root) can connect.
+- **Token Authentication:** Connecting to the socket is not enough. Every IPC request must include a 32-character cryptographically secure random token generated from the OS CSPRNG (`OsRng`) during initialization.
 - **Session Storage:** The session file (`~/.sudo-me`) is created with strict `0600` permissions.
+- **Password Prompt:** The TTY fallback disables terminal echo while reading the password and restores it afterwards.
+- **Confirm Dialog:** Dynamic command text is Pango-escaped before being passed to zenity, so command arguments cannot break or misformat the dialog markup.
 - **Memory Safety:** Written in Rust, avoiding common memory vulnerabilities associated with C/C++ IPC daemons.
 
 ## License

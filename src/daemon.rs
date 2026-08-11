@@ -39,11 +39,17 @@ pub fn run_daemon(socket_path: &Path, token: &str, home_dir: &str, uid: &str) ->
         use std::os::unix::net::UnixListener;
         let listener = UnixListener::bind(socket_path)?;
         
-        // Allow anyone to connect to the socket (directory permissions restrict access)
-        use std::os::unix::fs::PermissionsExt;
+        // Socket is created by the root daemon but the client connects as the
+        // unprivileged user: chown it to the caller's uid first, then 0600.
+        // If the uid can't be parsed, keep root ownership + 0600 — the
+        // connection fails loudly rather than silently widening access.
+        use std::os::unix::fs::{PermissionsExt, chown};
         let mut perms = std::fs::metadata(socket_path)?.permissions();
-        perms.set_mode(0o666);
+        perms.set_mode(0o600);
         std::fs::set_permissions(socket_path, perms)?;
+        if let Ok(uid_n) = uid.parse::<u32>() {
+            let _ = chown(socket_path, Some(uid_n), None);
+        }
         
         // Signal readiness
         println!("READY {} {}", socket_path.display(), token);
@@ -115,6 +121,7 @@ fn handle_client(mut stream: Box<dyn ReadWrite>, expected_token: &str, config: &
                 match askpass::prompt_confirm(&req.command, &req.args) {
                     Ok(true) => (),
                     _ => {
+                        audit_log(&req.command, &req.args, "DENY", "-");
                         let resp = IpcResponse::Error("User denied command execution".to_string());
                         let _ = writeln!(stream, "{}", serde_json::to_string(&resp).unwrap());
                         return;
@@ -160,15 +167,29 @@ fn handle_client(mut stream: Box<dyn ReadWrite>, expected_token: &str, config: &
                     let _ = out_thread.join();
                     let _ = err_thread.join();
                     
-                    let resp = IpcResponse::Exit(status.code().unwrap_or(1));
+                    let exit_code = status.code().unwrap_or(1);
+                    audit_log(&req.command, &req.args, "ALLOW", &exit_code.to_string());
+                    let resp = IpcResponse::Exit(exit_code);
                     let _ = writeln!(stream, "{}", serde_json::to_string(&resp).unwrap());
                 }
                 Err(e) => {
+                    audit_log(&req.command, &req.args, "ALLOW", "ERR");
                     let resp = IpcResponse::Error(e.to_string());
                     let _ = writeln!(stream, "{}", serde_json::to_string(&resp).unwrap());
                 }
             }
         }
+    }
+}
+
+fn audit_log(command: &str, args: &[String], decision: &str, exit_code: &str) {
+    let path = std::env::var("SUDO_ME_AUDIT_LOG")
+        .unwrap_or_else(|_| "/var/log/sudo-me-audit.log".to_string());
+    let ts = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%:z");
+    let line = format!("{} | {} | {} | {} | {}\n", ts, command, args.join(" "), decision, exit_code);
+    // Best-effort: a failed audit write must never break the privileged path.
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = f.write_all(line.as_bytes());
     }
 }
 
